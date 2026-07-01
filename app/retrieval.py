@@ -1,19 +1,21 @@
 """
-Stage 1: Retrieval layer.
+Stage 1: Retrieval layer (TF-IDF version).
 
-Embeds the cleaned catalog once (name + description + categories + job_levels)
-using a local sentence-transformers model, then does cosine-similarity search
-at query time. No external vector DB needed at this scale (370 items).
+Originally built with sentence-transformers, but switched to TF-IDF
+(scikit-learn) because sentence-transformers pulls in `tokenizers`, which
+needs Rust compilation and has no pre-built wheel on some free-tier hosts
+(Render's build image blocks writing to the cargo cache, so the build
+fails outright). TF-IDF has zero compiled/Rust dependencies, installs
+instantly anywhere, and needs no model download at runtime - at this
+catalog size (370 items) the retrieval quality difference is minor and
+the deployment reliability win is worth it.
 """
 import os
 import json
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-MODEL_NAME = "all-MiniLM-L6-v2"
-
-# Project root = parent of the app/ package, so paths work regardless of
-# the working directory uvicorn is launched from.
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -29,29 +31,20 @@ def build_embedding_text(entry: dict) -> str:
 
 
 class CatalogIndex:
-    """Loads catalog + embeddings once, then serves fast in-memory search."""
+    """Loads catalog once, fits a TF-IDF matrix in-memory (fast at this size,
+    no need to persist/cache to disk - fitting takes well under a second
+    for 370 short documents)."""
 
-    def __init__(self, catalog_path=None, embeddings_path=None):
+    def __init__(self, catalog_path=None):
         catalog_path = catalog_path or os.path.join(_ROOT, "shl_catalog_clean.json")
-        embeddings_path = embeddings_path or os.path.join(_ROOT, "catalog_embeddings.npy")
         with open(catalog_path, "r", encoding="utf-8") as f:
             self.catalog = json.load(f)
-        self.model = SentenceTransformer(MODEL_NAME)
 
-        try:
-            self.embeddings = np.load(embeddings_path)
-            assert self.embeddings.shape[0] == len(self.catalog)
-        except (FileNotFoundError, AssertionError):
-            self.embeddings = self._build_and_save(embeddings_path)
-
-    def _build_and_save(self, embeddings_path):
         texts = [build_embedding_text(e) for e in self.catalog]
-        emb = self.model.encode(
-            texts, convert_to_numpy=True, normalize_embeddings=True,
-            show_progress_bar=False,
+        self.vectorizer = TfidfVectorizer(
+            stop_words="english", ngram_range=(1, 2), max_features=5000
         )
-        np.save(embeddings_path, emb)
-        return emb
+        self.matrix = self.vectorizer.fit_transform(texts)
 
     def search(self, query: str, top_k: int = 10,
                test_type_filter=None, job_level_filter=None):
@@ -61,9 +54,8 @@ class CatalogIndex:
         job_level_filter: optional list of job-level strings
         Returns list of dicts: name, url, test_type, score
         """
-        q_emb = self.model.encode([query], convert_to_numpy=True,
-                                   normalize_embeddings=True)[0]
-        scores = self.embeddings @ q_emb
+        q_vec = self.vectorizer.transform([query])
+        scores = cosine_similarity(q_vec, self.matrix)[0]
 
         idxs = list(range(len(self.catalog)))
         if test_type_filter:

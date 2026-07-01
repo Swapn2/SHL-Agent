@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+from groq import Groq
 load_dotenv()
 """
 Stage 2: Agent core logic.
