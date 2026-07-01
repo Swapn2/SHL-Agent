@@ -1,0 +1,5 @@
+.env
+__pycache__/
+*.pyc
+shl_catalog_clean.json
+catalog_embeddings.npy
