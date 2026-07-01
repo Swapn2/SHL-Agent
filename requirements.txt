@@ -1,7 +1,7 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-pydantic==2.9.2
-sentence-transformers==3.1.1
-numpy==1.26.4
-groq==0.11.0
-python-dotenv==1.0.1
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.30,<0.31
+pydantic>=2.9,<2.10
+scikit-learn>=1.5,<1.6
+numpy>=1.26,<2.0
+groq>=0.11,<0.12
+python-dotenv>=1.0,<2.0
