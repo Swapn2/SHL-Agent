@@ -36,7 +36,7 @@ class CatalogIndex:
     for 370 short documents)."""
 
     def __init__(self, catalog_path=None):
-        catalog_path = catalog_path or os.path.join(_ROOT, "shl_catalog_clean.json")
+        catalog_path = catalog_path or os.path.join(_ROOT, "shl_catalog.json")
         with open(catalog_path, "r", encoding="utf-8") as f:
             self.catalog = json.load(f)
 
